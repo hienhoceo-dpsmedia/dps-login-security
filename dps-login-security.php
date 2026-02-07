@@ -3,7 +3,7 @@
  * Plugin Name: DPS Login Security
  * Plugin URI: https://dps.media/
  * Description: Enhanced WordPress login security with custom login page, rate limiting, and protection against brute force attacks.
- * Version: 7.0.2
+ * Version: 7.0.3
  * Requires at least: 5.0
  * Requires PHP: 7.2
  * Author: DPS.Media
@@ -25,7 +25,7 @@ if (!defined('ABSPATH')) {
 // add_action('plugins_loaded', 'dps_login_security_load_textdomain'); // Removed as discouraged since WP 4.6
 
 if (!defined('DPS_LOGIN_SECURITY_VERSION')) {
-    define('DPS_LOGIN_SECURITY_VERSION', '7.0.2');
+    define('DPS_LOGIN_SECURITY_VERSION', '7.0.3');
 }
 
 // Security module constants
@@ -709,7 +709,7 @@ function caldps_settings_page_v55() {
     </style>
     
     <div class="wrap">
-        <h1>Cài đặt DPS Login Security v6.0</h1>
+        <h1>Cài đặt DPS Login Security v7.0.3</h1>
         
         <form method="post">
             <?php wp_nonce_field('caldps_save_settings'); ?>
@@ -725,10 +725,10 @@ function caldps_settings_page_v55() {
                     <tr><th>Logo URL (PNG/SVG/JPG)</th>
                         <td><input name="caldps_logo" value="<?php echo esc_url($logo); ?>" style="width:350px"></td></tr>
                     <tr><th>HTML tự do cho bên trái</th>
-                        <td><textarea name="caldps_left_custom_html" style="width:550px;height:220px;"><?php echo $left_custom_html; // escaped above ?></textarea><br>
+                        <td><textarea name="caldps_left_custom_html" style="width:550px;height:220px;"><?php echo esc_textarea($left_custom_html); ?></textarea><br>
                         <small>Toàn bộ phần trái sẽ hiển thị đúng HTML này. Để trống sẽ sử dụng HTML mặc định của DPS.MEDIA.</small></td></tr>
                     <tr><th>CSS tự do cho bên trái</th>
-                        <td><textarea name="caldps_left_custom_css" style="width:550px;height:120px;"><?php echo $left_custom_css; // escaped above ?></textarea>
+                        <td><textarea name="caldps_left_custom_css" style="width:550px;height:120px;"><?php echo esc_textarea($left_custom_css); ?></textarea>
                         <br><small>Inject vào &lt;style&gt;. Để trống sẽ sử dụng CSS mặc định.</small></td></tr>
                 </table>
             </div>
@@ -951,7 +951,7 @@ function caldps_settings_page_v55() {
                             $status_class = $is_currently_blocked ? 'style="background-color: #ffc9c9;"' : '';
                             $status_text = $is_currently_blocked ? '🚫 Đang bị chặn' : '✅ Đang theo dõi';
                         ?>
-                            <tr <?php echo $status_class; ?>>
+                            <tr <?php echo esc_attr($status_class); ?>>
                                 <td><code><?php echo esc_html($row->ip_address); ?></code></td>
                                 <td>
                                     <strong><?php echo intval($row->attempt_count); ?></strong>
@@ -1727,7 +1727,7 @@ add_action('template_redirect', function() {
         }
         <?php if($left_custom_css): ?>
         /* CUSTOM CSS FROM SETTINGS */
-        <?php echo $left_custom_css; ?>
+        <?php echo wp_strip_all_tags($left_custom_css); ?>
         <?php endif; ?>
         
 @media (max-width: 900px) {
@@ -1789,7 +1789,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
                         <label style="font-size:.99em"><input type="checkbox" name="rememberme" value="1" checked <?php echo $is_blocked ? 'disabled aria-disabled="true"' : ''; ?>> Ghi nhớ đăng nhập</label>
                         <button type="submit" <?php echo $is_blocked ? 'disabled aria-disabled="true"' : ''; ?>>Đăng nhập</button>
-                        <a class="caldps-link" href="<?php echo wp_lostpassword_url(); ?>">Quên mật khẩu?</a>
+                        <a class="caldps-link" href="<?php echo esc_url(wp_lostpassword_url()); ?>">Quên mật khẩu?</a>
                     </form>
                 </div>
             </div>
