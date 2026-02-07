@@ -3,7 +3,7 @@
  * Plugin Name: DPS Login Security
  * Plugin URI: https://dps.media/
  * Description: Enhanced WordPress login security with custom login page, rate limiting, and protection against brute force attacks.
- * Version: 7.0.6
+ * Version: 7.0.7
  * Requires at least: 5.0
  * Requires PHP: 7.2
  * Author: DPS.Media
@@ -25,7 +25,7 @@ if (!defined('ABSPATH')) {
 // add_action('plugins_loaded', 'dps_login_security_load_textdomain'); // Removed as discouraged since WP 4.6
 
 if (!defined('DPS_LOGIN_SECURITY_VERSION')) {
-    define('DPS_LOGIN_SECURITY_VERSION', '7.0.6');
+    define('DPS_LOGIN_SECURITY_VERSION', '7.0.7');
 }
 
 // Security module constants
@@ -727,7 +727,7 @@ function caldps_settings_page_v55() {
     </style>
     
     <div class="wrap">
-        <h1>Cài đặt DPS Login Security v7.0.6</h1>
+        <h1>Cài đặt DPS Login Security v7.0.7</h1>
         
         <form method="post">
             <?php wp_nonce_field('caldps_save_settings'); ?>
@@ -1585,60 +1585,41 @@ add_filter('query_vars', function($vars){
     return $vars;
 });
 
-// === 1. Chặn toàn bộ wp-login, wp-admin chưa login và chuyển về slug custom ===
-add_action('login_init', function(){
-    $slug = get_option('caldps_slug', 'admindps');
-    if (defined('DOING_AJAX') && DOING_AJAX) return;
-    // Allow specific core login actions (lost password / reset) to work normally
-    $action = isset($_REQUEST['action']) ? sanitize_key($_REQUEST['action']) : '';
-    $allowed_actions = array('lostpassword', 'retrievepassword', 'rp', 'resetpass', 'postpass', 'logout');
+// === 1. Chặn hoặc Chuyển hướng truy cập wp-login.php và /wp-admin ===
+add_action('init', function(){
+    global $pagenow;
+    
+    // 1. Bỏ qua AJAX và Cron
+    if ((defined('DOING_AJAX') && DOING_AJAX) || (defined('DOING_CRON') && DOING_CRON)) return;
+    
+    // 2. Nhận diện các đường dẫn mặc định
+    $is_login_page = ($pagenow === 'wp-login.php');
+    $is_admin_page = (is_admin() && !is_user_logged_in());
+    
+    if (!$is_login_page && !$is_admin_page) return;
+    if (is_user_logged_in()) return;
 
-    // Apply rate limiting to wp-login.php access (check-only)
-    if (get_option('caldps_enable_rate_limit', 0) && caldps_rate_limit_is_blocked()) {
-        status_header(403);
-        caldps_die_rate_limit_block();
+    // 3. Ngoại lệ cho các hành động mặc định của WordPress
+    if ($is_login_page) {
+        $action = isset($_REQUEST['action']) ? sanitize_key($_REQUEST['action']) : '';
+        $allowed_actions = array('lostpassword', 'retrievepassword', 'rp', 'resetpass', 'postpass', 'logout');
+        if (in_array($action, $allowed_actions, true)) return;
+    }
+    
+    // Cho wp-admin, cho phép admin-ajax.php và admin-post.php
+    if ($is_admin_page) {
+        $uri = $_SERVER['REQUEST_URI'];
+        if (strpos($uri, 'admin-ajax.php') !== false || strpos($uri, 'admin-post.php') !== false) return;
     }
 
-    if (strpos($_SERVER['REQUEST_URI'], '/wp-login.php') !== false || strpos($_SERVER['REQUEST_URI'], '/wp-admin') !== false) {
-        // Do not redirect if accessing allowed login actions
-        if (strpos($_SERVER['REQUEST_URI'], '/wp-login.php') !== false && in_array($action, $allowed_actions, true)) {
-            return;
-        }
-        if (!is_user_logged_in()) {
-            if (get_option('dps_block_standard_login', 0)) {
-                DPS_Security_Logger::log('standard_login_blocked', "Blocked access to standard login URL: " . $_SERVER['REQUEST_URI'], 'medium');
-                wp_die('Access Denied. Standard login is disabled for security.', 'Forbidden', array('response' => 403));
-            } else {
-                wp_safe_redirect(home_url("/$slug/"));
-                exit;
-            }
-        }
-    }
-}, 1);
-
-add_action('admin_init', function() {
+    // 4. Xử lý Chặn (403) hoặc Chuyển hướng (Redirect)
     $slug = get_option('caldps_slug', 'admindps');
-    if (!is_user_logged_in() && !defined('DOING_AJAX')) {
-        // Allow admin-ajax and admin-post endpoints to pass through when unauthenticated
-        $request_uri = $_SERVER['REQUEST_URI'];
-        if (strpos($request_uri, '/wp-admin/admin-ajax.php') !== false || strpos($request_uri, '/wp-admin/admin-post.php') !== false) {
-            return;
-        }
-        // Apply rate limiting to admin access attempts (check-only)
-        if (get_option('caldps_enable_rate_limit', 0) && caldps_rate_limit_is_blocked()) {
-            status_header(403);
-            caldps_die_rate_limit_block();
-        }
-
-        if (strpos($request_uri, '/wp-admin') !== false || strpos($request_uri, '/wp-login.php') !== false) {
-            if (get_option('dps_block_standard_login', 0)) {
-                DPS_Security_Logger::log('standard_login_blocked', "Blocked admin access attempt: $request_uri", 'medium');
-                wp_die('Access Denied. Standard login is disabled for security.', 'Forbidden', array('response' => 403));
-            } else {
-                wp_safe_redirect(home_url("/$slug/"));
-                exit;
-            }
-        }
+    if (get_option('dps_block_standard_login', 0)) {
+        DPS_Security_Logger::log('standard_login_blocked', "Blocked attempt to: " . $_SERVER['REQUEST_URI'], 'high');
+        wp_die('Access Denied. Standard login is disabled for security.', 'Forbidden', array('response' => 403));
+    } else {
+        wp_safe_redirect(home_url("/$slug/"));
+        exit;
     }
 }, 1);
 
