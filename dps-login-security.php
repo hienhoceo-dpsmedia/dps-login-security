@@ -3,7 +3,7 @@
  * Plugin Name: DPS Login Security
  * Plugin URI: https://dps.media/
  * Description: Enhanced WordPress login security with custom login page, rate limiting, and protection against brute force attacks.
- * Version: 7.0.8
+ * Version: 7.0.9
  * Requires at least: 5.0
  * Requires PHP: 7.2
  * Author: DPS.Media
@@ -25,7 +25,7 @@ if (!defined('ABSPATH')) {
 // add_action('plugins_loaded', 'dps_login_security_load_textdomain'); // Removed as discouraged since WP 4.6
 
 if (!defined('DPS_LOGIN_SECURITY_VERSION')) {
-    define('DPS_LOGIN_SECURITY_VERSION', '7.0.8');
+    define('DPS_LOGIN_SECURITY_VERSION', '7.0.9');
 }
 
 // Security module constants
@@ -727,7 +727,7 @@ function caldps_settings_page_v55() {
     </style>
     
     <div class="wrap">
-        <h1>Cài đặt DPS Login Security v7.0.8</h1>
+        <h1>Cài đặt DPS Login Security v7.0.9</h1>
         
         <form method="post">
             <?php wp_nonce_field('caldps_save_settings'); ?>
@@ -1586,7 +1586,8 @@ add_filter('query_vars', function($vars){
 });
 
 // === 1. Chặn hoặc Chuyển hướng truy cập wp-login.php và /wp-admin ===
-add_action('init', function(){
+// Sử dụng setup_theme để chặn sớm hơn init, giống các plugin bảo mật chuyên nghiệp
+add_action('setup_theme', function(){
     global $pagenow;
     
     // 1. Bỏ qua AJAX và Cron
@@ -1594,15 +1595,26 @@ add_action('init', function(){
     
     // 2. Nhận diện các đường dẫn mặc định một cách triệt để
     $uri = isset($_SERVER['REQUEST_URI']) ? $_SERVER['REQUEST_URI'] : '';
+    $script_name = isset($_SERVER['SCRIPT_NAME']) ? $_SERVER['SCRIPT_NAME'] : '';
+
+    // Kiểm tra trang login (wp-login.php)
+    $is_login_page = (
+        $pagenow === 'wp-login.php' || 
+        strpos($uri, 'wp-login.php') !== false || 
+        strpos($script_name, 'wp-login.php') !== false
+    );
     
-    // Cả wp-login.php và các biến thể /wp-admin
-    $is_login_page = ($pagenow === 'wp-login.php' || strpos($uri, 'wp-login.php') !== false);
-    $is_admin_request = (is_admin() || strpos($uri, '/wp-admin') !== false);
+    // Kiểm tra trang admin (/wp-admin)
+    $is_admin_request = (
+        is_admin() || 
+        strpos($uri, '/wp-admin') !== false || 
+        (strpos($uri, '/admin') !== false && !is_dir(ABSPATH . 'admin')) // Chặn cả alias /admin nếu không có thư mục thật
+    );
     
     // Bỏ qua nếu đã login
     if (is_user_logged_in()) return;
 
-    // Filter out AJAX và Post requests cho admin
+    // Filter out AJAX và Post requests cho admin (cho phép chạy bình thường)
     if ($is_admin_request && (strpos($uri, 'admin-ajax.php') !== false || strpos($uri, 'admin-post.php') !== false)) return;
 
     if (!$is_login_page && !$is_admin_request) return;
@@ -1615,8 +1627,8 @@ add_action('init', function(){
     }
     
     // 4. Xử lý Chặn (403) hoặc Chuyển hướng (Redirect)
-    $slug = get_option('caldps_slug', 'admindps');
     $block_standard = get_option('dps_block_standard_login', 0);
+    $slug = get_option('caldps_slug', 'admindps');
 
     if ($block_standard) {
         DPS_Security_Logger::log('standard_login_blocked', "Blocked access attempt: " . $uri, 'high');
@@ -1627,12 +1639,26 @@ add_action('init', function(){
         header('Expires: 0');
         wp_die('Access Denied. Standard login is disabled for security.', 'Forbidden', array('response' => 403));
     } else {
-        // Log redirect for debugging if needed
-        // DPS_Security_Logger::log('standard_login_redirected', "Redirected access attempt: " . $uri, 'low');
         wp_safe_redirect(home_url("/$slug/"));
         exit;
     }
 }, 1);
+
+// Gỡ bỏ bộ điều hướng mặc định của WordPress để tránh nó redirect trước plugin
+remove_action( 'template_redirect', 'wp_redirect_admin_locations', 1000 );
+
+// Chặn các lệnh Redirect ngầm về wp-login.php từ các plugin khác
+add_filter('wp_redirect', function($location){
+    if (is_user_logged_in()) return $location;
+    if (!get_option('dps_block_standard_login', 0)) return $location;
+
+    if (strpos($location, 'wp-login.php') !== false || strpos($location, 'wp-admin') !== false) {
+        // Nếu đang cố redirect về login chuẩn, chặn đứng trả về 403
+        status_header(403);
+        wp_die('Access Denied. Internal redirect to standard login blocked.', 'Forbidden', array('response' => 403));
+    }
+    return $location;
+}, 10, 1);
 
 // === 2. Render trang login custom ===
 add_action('template_redirect', function() {
