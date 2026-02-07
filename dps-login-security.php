@@ -3,7 +3,7 @@
  * Plugin Name: DPS Login Security
  * Plugin URI: https://dps.media/
  * Description: Enhanced WordPress login security with custom login page, rate limiting, and protection against brute force attacks.
- * Version: 7.0.10
+ * Version: 7.0.11
  * Requires at least: 5.0
  * Requires PHP: 7.2
  * Author: DPS.Media
@@ -25,7 +25,7 @@ if (!defined('ABSPATH')) {
 // add_action('plugins_loaded', 'dps_login_security_load_textdomain'); // Removed as discouraged since WP 4.6
 
 if (!defined('DPS_LOGIN_SECURITY_VERSION')) {
-    define('DPS_LOGIN_SECURITY_VERSION', '7.0.10');
+    define('DPS_LOGIN_SECURITY_VERSION', '7.0.11');
 }
 
 // Security module constants
@@ -727,7 +727,7 @@ function caldps_settings_page_v55() {
     </style>
     
     <div class="wrap">
-        <h1>Cài đặt DPS Login Security v7.0.10</h1>
+        <h1>Cài đặt DPS Login Security v7.0.11</h1>
         
         <form method="post">
             <?php wp_nonce_field('caldps_save_settings'); ?>
@@ -1593,8 +1593,16 @@ add_action('setup_theme', function(){
     // 1. Bỏ qua AJAX và Cron
     if ((defined('DOING_AJAX') && DOING_AJAX) || (defined('DOING_CRON') && DOING_CRON)) return;
     
-    // 2. Nhận diện các đường dẫn mặc định một cách triệt để
+    // 2. QUAN TRỌNG: Bỏ qua custom login slug NGAY TỪ ĐẦU để tránh redirect loop
+    $slug = get_option('caldps_slug', 'admindps');
     $uri = isset($_SERVER['REQUEST_URI']) ? $_SERVER['REQUEST_URI'] : '';
+    
+    // Kiểm tra chính xác custom slug (phải có dấu / trước và sau hoặc cuối URI)
+    if (preg_match('#/' . preg_quote($slug, '#') . '(/|$)#', $uri)) {
+        return; // Cho phép truy cập vào trang login custom
+    }
+    
+    // 3. Nhận diện các đường dẫn mặc định
     $script_name = isset($_SERVER['SCRIPT_NAME']) ? $_SERVER['SCRIPT_NAME'] : '';
 
     // Kiểm tra trang login (wp-login.php)
@@ -1604,11 +1612,10 @@ add_action('setup_theme', function(){
         strpos($script_name, 'wp-login.php') !== false
     );
     
-    // Kiểm tra trang admin (/wp-admin)
+    // Kiểm tra trang admin (/wp-admin) - CHỈ kiểm tra /wp-admin, KHÔNG kiểm tra /admin
     $is_admin_request = (
         is_admin() || 
-        strpos($uri, '/wp-admin') !== false || 
-        (strpos($uri, '/admin') !== false && !is_dir(ABSPATH . 'admin')) // Chặn cả alias /admin nếu không có thư mục thật
+        strpos($uri, '/wp-admin') !== false
     );
     
     // Bỏ qua nếu đã login
@@ -1619,17 +1626,11 @@ add_action('setup_theme', function(){
 
     if (!$is_login_page && !$is_admin_request) return;
 
-    // 3. Ngoại lệ cho các hành động mặc định của WordPress (Mất mật khẩu, Logout)
+    // 4. Ngoại lệ cho các hành động mặc định của WordPress (Mất mật khẩu, Logout)
     if ($is_login_page) {
         $action = isset($_REQUEST['action']) ? sanitize_key($_REQUEST['action']) : '';
         $allowed_actions = array('lostpassword', 'retrievepassword', 'rp', 'resetpass', 'postpass', 'logout');
         if (in_array($action, $allowed_actions, true)) return;
-    }
-    
-    // 4. QUAN TRỌNG: Bỏ qua nếu đang truy cập custom login slug để tránh redirect loop
-    $slug = get_option('caldps_slug', 'admindps');
-    if (strpos($uri, '/' . $slug) !== false || strpos($uri, '/' . $slug . '/') !== false) {
-        return; // Cho phép truy cập vào trang login custom
     }
     
     // 5. Xử lý Chặn (403) hoặc Chuyển hướng (Redirect)
