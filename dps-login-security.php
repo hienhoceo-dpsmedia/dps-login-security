@@ -3,7 +3,7 @@
  * Plugin Name: DPS Login Security
  * Plugin URI: https://dps.media/
  * Description: Enhanced WordPress login security with custom login page, rate limiting, and protection against brute force attacks.
- * Version: 7.0.1
+ * Version: 7.0.2
  * Requires at least: 5.0
  * Requires PHP: 7.2
  * Author: DPS.Media
@@ -22,10 +22,10 @@ if (!defined('ABSPATH')) {
 }
 
 // Load plugin textdomain
-add_action('plugins_loaded', 'dps_login_security_load_textdomain');
+// add_action('plugins_loaded', 'dps_login_security_load_textdomain'); // Removed as discouraged since WP 4.6
 
 if (!defined('DPS_LOGIN_SECURITY_VERSION')) {
-    define('DPS_LOGIN_SECURITY_VERSION', '7.0.1');
+    define('DPS_LOGIN_SECURITY_VERSION', '7.0.2');
 }
 
 // Security module constants
@@ -55,13 +55,7 @@ function dps_login_security_bootstrap_defaults() {
 // Apply defaults immediately so protections are active without needing a manual save.
 dps_login_security_bootstrap_defaults();
 
-function dps_login_security_load_textdomain() {
-    load_plugin_textdomain(
-        'dps-login-security',
-        false,
-        dirname(plugin_basename(__FILE__)) . '/languages'
-    );
-}
+// Text domain is handled automatically by WordPress.org for plugins hosted there.
 
 // === Settings Page ===
 add_action('admin_menu', function() {
@@ -519,7 +513,7 @@ function caldps_settings_page_v55() {
     // Handle clearing a specific blocked IP
     if (isset($_POST['caldps_clear_ip'])) {
         check_admin_referer('caldps_clear_ip');
-        $ip_to_clear = isset($_POST['caldps_ip_to_clear']) ? trim(sanitize_text_field($_POST['caldps_ip_to_clear'])) : '';
+        $ip_to_clear = isset($_POST['caldps_ip_to_clear']) ? trim(sanitize_text_field(wp_unslash($_POST['caldps_ip_to_clear']))) : '';
 
         if (!$ip_to_clear || !filter_var($ip_to_clear, FILTER_VALIDATE_IP)) {
             echo '<div class="error"><p>IP không hợp lệ. Vui lòng nhập IPv4/IPv6 hợp lệ.</p></div>';
@@ -538,7 +532,7 @@ function caldps_settings_page_v55() {
     if (isset($_POST['caldps_save'])) {
         check_admin_referer('caldps_save_settings');
         $old_slug = get_option('caldps_slug', 'admindps');
-        $new_slug = sanitize_title($_POST['caldps_slug'] ?: 'admindps');
+        $new_slug = sanitize_title(isset($_POST['caldps_slug']) ? wp_unslash($_POST['caldps_slug']) : 'admindps');
 
         // Validate slug - avoid conflicts
         $forbidden_slugs = array(
@@ -558,12 +552,12 @@ function caldps_settings_page_v55() {
         }
 
         update_option('caldps_slug', $new_slug);
-        update_option('caldps_greeting', sanitize_text_field($_POST['caldps_greeting']));
-        update_option('caldps_logo', esc_url_raw($_POST['caldps_logo']));
+        update_option('caldps_greeting', sanitize_text_field(isset($_POST['caldps_greeting']) ? wp_unslash($_POST['caldps_greeting']) : ''));
+        update_option('caldps_logo', esc_url_raw(isset($_POST['caldps_logo']) ? wp_unslash($_POST['caldps_logo']) : ''));
         
         // Sanitize custom HTML and CSS
-        update_option('caldps_left_custom_html', wp_kses_post(stripslashes_deep($_POST['caldps_left_custom_html'])));
-        update_option('caldps_left_custom_css', wp_strip_all_tags(stripslashes_deep($_POST['caldps_left_custom_css'])));
+        update_option('caldps_left_custom_html', wp_kses_post(isset($_POST['caldps_left_custom_html']) ? wp_unslash($_POST['caldps_left_custom_html']) : ''));
+        update_option('caldps_left_custom_css', wp_strip_all_tags(isset($_POST['caldps_left_custom_css']) ? wp_unslash($_POST['caldps_left_custom_css']) : ''));
         
         // Lưu các tùy chọn bảo mật
         update_option('caldps_disable_file_edit', isset($_POST['caldps_disable_file_edit']) ? 1 : 0);
@@ -572,13 +566,13 @@ function caldps_settings_page_v55() {
         update_option('caldps_hide_wp_version', isset($_POST['caldps_hide_wp_version']) ? 1 : 0);
         update_option('caldps_hide_plugin_version', isset($_POST['caldps_hide_plugin_version']) ? 1 : 0);
 
-        // Lưu cài đặt rate limiting
+        // Lưu cai đặt rate limiting
         update_option('caldps_enable_rate_limit', isset($_POST['caldps_enable_rate_limit']) ? 1 : 0);
-        update_option('caldps_rate_limit_attempts', absint($_POST['caldps_rate_limit_attempts']));
-        update_option('caldps_rate_limit_time', absint($_POST['caldps_rate_limit_time']));
-        update_option('caldps_rate_limit_block_time', absint($_POST['caldps_rate_limit_block_time']));
+        update_option('caldps_rate_limit_attempts', absint(isset($_POST['caldps_rate_limit_attempts']) ? wp_unslash($_POST['caldps_rate_limit_attempts']) : 5));
+        update_option('caldps_rate_limit_time', absint(isset($_POST['caldps_rate_limit_time']) ? wp_unslash($_POST['caldps_rate_limit_time']) : 15));
+        update_option('caldps_rate_limit_block_time', absint(isset($_POST['caldps_rate_limit_block_time']) ? wp_unslash($_POST['caldps_rate_limit_block_time']) : 60));
         
-        // Lưu cài đặt Advanced Protection (v7.0)
+        // Luu cài đặt Advanced Protection (v7.0)
         update_option('dps_block_xmlrpc', isset($_POST['dps_block_xmlrpc']) ? 1 : 0);
         update_option('dps_detect_login_scan', isset($_POST['dps_detect_login_scan']) ? 1 : 0);
         update_option('dps_block_user_enum', isset($_POST['dps_block_user_enum']) ? 1 : 0);
@@ -616,9 +610,9 @@ function caldps_settings_page_v55() {
         $left_custom_css = caldps_get_default_css();
     }
     
-    // Khi hiển thị lại để sửa, chỉ escape ở textarea (cho giao diện admin)
-    $left_custom_html = htmlspecialchars($left_custom_html, ENT_QUOTES);
-    $left_custom_css = htmlspecialchars($left_custom_css, ENT_QUOTES);
+    // Khi hiển thị lại để sửa, escape cho input fields
+    $left_custom_html = esc_textarea($left_custom_html);
+    $left_custom_css = esc_textarea($left_custom_css);
     
     // Lấy các tùy chọn bảo mật
     $disable_file_edit = get_option('caldps_disable_file_edit', 0);
@@ -651,16 +645,19 @@ function caldps_settings_page_v55() {
         $table_name = $wpdb->prefix . 'dps_rate_limit';
         $now = current_time('mysql');
         $blocked_list = $wpdb->get_results($wpdb->prepare(
-            "SELECT ip_address, attempt_count, blocked_until FROM $table_name WHERE is_blocked = 1 AND blocked_until > %s ORDER BY blocked_until DESC LIMIT 50",
+            "SELECT ip_address, attempt_count, blocked_until FROM {$table_name} WHERE is_blocked = 1 AND blocked_until > %s ORDER BY blocked_until DESC LIMIT 50",
             $now
         ));
         
         // Get all recent login attempts (blocked and not blocked) for monitoring
         $all_attempts = $wpdb->get_results(
-            "SELECT ip_address, attempt_count, last_attempt, is_blocked, blocked_until 
-             FROM $table_name 
-             ORDER BY last_attempt DESC 
-             LIMIT 100"
+            $wpdb->prepare(
+                "SELECT ip_address, attempt_count, last_attempt, is_blocked, blocked_until 
+                 FROM {$table_name} 
+                 ORDER BY last_attempt DESC 
+                 LIMIT %d",
+                100
+            )
         );
     }
     ?>
@@ -722,16 +719,16 @@ function caldps_settings_page_v55() {
                 <h3>🔐 Cài đặt trang đăng nhập</h3>
                 <table class="form-table">
                     <tr><th>Slug trang login</th>
-                        <td><input name="caldps_slug" value="<?php echo $slug; ?>" required> <small>VD: admindps</small></td></tr>
+                        <td><input name="caldps_slug" value="<?php echo esc_attr($slug); ?>" required> <small>VD: admindps</small></td></tr>
                     <tr><th>Greeting (dòng chào mừng)</th>
-                        <td><input name="caldps_greeting" value="<?php echo $greeting; ?>" style="width:350px"></td></tr>
+                        <td><input name="caldps_greeting" value="<?php echo esc_attr($greeting); ?>" style="width:350px"></td></tr>
                     <tr><th>Logo URL (PNG/SVG/JPG)</th>
-                        <td><input name="caldps_logo" value="<?php echo $logo; ?>" style="width:350px"></td></tr>
+                        <td><input name="caldps_logo" value="<?php echo esc_url($logo); ?>" style="width:350px"></td></tr>
                     <tr><th>HTML tự do cho bên trái</th>
-                        <td><textarea name="caldps_left_custom_html" style="width:550px;height:220px;"><?php echo $left_custom_html; ?></textarea><br>
+                        <td><textarea name="caldps_left_custom_html" style="width:550px;height:220px;"><?php echo $left_custom_html; // escaped above ?></textarea><br>
                         <small>Toàn bộ phần trái sẽ hiển thị đúng HTML này. Để trống sẽ sử dụng HTML mặc định của DPS.MEDIA.</small></td></tr>
                     <tr><th>CSS tự do cho bên trái</th>
-                        <td><textarea name="caldps_left_custom_css" style="width:550px;height:120px;"><?php echo $left_custom_css; ?></textarea>
+                        <td><textarea name="caldps_left_custom_css" style="width:550px;height:120px;"><?php echo $left_custom_css; // escaped above ?></textarea>
                         <br><small>Inject vào &lt;style&gt;. Để trống sẽ sử dụng CSS mặc định.</small></td></tr>
                 </table>
             </div>
@@ -796,21 +793,21 @@ function caldps_settings_page_v55() {
                     <tr>
                         <th>Số lần thử tối đa</th>
                         <td>
-                            <input type="number" name="caldps_rate_limit_attempts" value="<?php echo $rate_limit_attempts; ?>" min="1" max="20" required>
+                            <input type="number" name="caldps_rate_limit_attempts" value="<?php echo esc_attr($rate_limit_attempts); ?>" min="1" max="20" required>
                             <small>Số lần đăng nhập thất bại tối đa cho phép</small>
                         </td>
                     </tr>
                     <tr>
                         <th>Thời gian giới hạn (phút)</th>
                         <td>
-                            <input type="number" name="caldps_rate_limit_time" value="<?php echo $rate_limit_time; ?>" min="1" max="60" required>
+                            <input type="number" name="caldps_rate_limit_time" value="<?php echo esc_attr($rate_limit_time); ?>" min="1" max="60" required>
                             <small>Trong khoảng thời gian bao nhiêu phút</small>
                         </td>
                     </tr>
                     <tr>
                         <th>Thời gian chặn (phút)</th>
                         <td>
-                            <input type="number" name="caldps_rate_limit_block_time" value="<?php echo $rate_limit_block_time; ?>" min="1" max="1440" required>
+                            <input type="number" name="caldps_rate_limit_block_time" value="<?php echo esc_attr($rate_limit_block_time); ?>" min="1" max="1440" required>
                             <small>Thời gian chặn IP nếu vượt quá giới hạn</small>
                         </td>
                     </tr>
@@ -963,7 +960,7 @@ function caldps_settings_page_v55() {
                                     <?php endif; ?>
                                 </td>
                                 <td><?php echo esc_html($row->last_attempt); ?></td>
-                                <td><?php echo $status_text; ?></td>
+                                <td><?php echo esc_html($status_text); ?></td>
                                 <td>
                                     <form method="post" style="margin:0;">
                                         <?php wp_nonce_field('caldps_clear_ip'); ?>
@@ -993,7 +990,16 @@ function caldps_update_htaccess() {
         return;
     }
 
-    if (!is_writable($htaccess_file)) {
+    // Initialize WP_Filesystem
+    require_once(ABSPATH . 'wp-admin/includes/file.php');
+    if (!function_exists('WP_Filesystem')) {
+        return;
+    }
+
+    WP_Filesystem();
+    global $wp_filesystem;
+
+    if (!$wp_filesystem || !$wp_filesystem->is_writable($htaccess_file)) {
         add_settings_error(
             'dps_login_security_settings',
             'htaccess_not_writable',
@@ -1003,14 +1009,14 @@ function caldps_update_htaccess() {
         return;
     }
 
-    $htaccess_content = file_get_contents($htaccess_file);
+    $htaccess_content = $wp_filesystem->get_contents($htaccess_file);
 
     // Remove old plugin rules (including XML-RPC rules)
     $htaccess_content = preg_replace('/# BEGIN DPS Security.*?# END DPS Security\s*/s', '', $htaccess_content);
     $htaccess_content = preg_replace('/# BEGIN DPS XML-RPC Block.*?# END DPS XML-RPC Block\s*/s', '', $htaccess_content);
 
-    // Write back the cleaned content (server-level handles these rules)
-    if (file_put_contents($htaccess_file, $htaccess_content) === false) {
+    // Write back the cleaned content
+    if (!$wp_filesystem->put_contents($htaccess_file, $htaccess_content)) {
         add_settings_error(
             'dps_login_security_settings',
             'htaccess_write_failed',
@@ -1045,7 +1051,7 @@ if (get_option('caldps_disable_error_reporting', 0)) {
     if (!defined('WP_DEBUG_DISPLAY')) {
         define('WP_DEBUG_DISPLAY', false);
     }
-    @ini_set('display_errors', 0);
+    // ini_set('display_errors', 0) removed as discouraged for plugins.
 }
 
 // Tắt pingbacks và trackbacks
@@ -1201,7 +1207,7 @@ add_action('init', function() {
                 '<h2>Emergency Access</h2>' .
                 '<p><strong>Current Login URL:</strong> <a href="' . esc_url($login_url) . '">' . esc_html($login_url) . '</a></p>' .
                 '<p><em>This emergency page is only visible to administrators who are already logged in.</em></p>' .
-                '<p><a href="' . admin_url() . '">← Back to Admin</a></p>',
+                '<p><a href="' . esc_url(admin_url()) . '">← Back to Admin</a></p>',
                 'DPS Login Security - Emergency Access',
                 array('response' => 200)
             );
@@ -1229,7 +1235,7 @@ function caldps_cleanup_rate_limit_table() {
     $table_name = $wpdb->prefix . 'dps_rate_limit';
 
     // Xóa toàn bộ table khi deactivate
-    $wpdb->query("DROP TABLE IF EXISTS $table_name");
+    $wpdb->query("DROP TABLE IF EXISTS {$table_name}");
 }
 
 function caldps_create_rate_limit_table() {
@@ -1346,13 +1352,13 @@ function caldps_rate_limit_is_blocked($ip = null) {
 
     // Remove expired blocks
     $wpdb->query($wpdb->prepare(
-        "DELETE FROM $table_name WHERE is_blocked = 1 AND blocked_until <= %s",
+        "DELETE FROM {$table_name} WHERE is_blocked = 1 AND blocked_until <= %s",
         $current_time
     ));
 
     // Check active block
     $blocked_until = $wpdb->get_var($wpdb->prepare(
-        "SELECT blocked_until FROM $table_name WHERE ip_address = %s AND is_blocked = 1 AND blocked_until > %s LIMIT 1",
+        "SELECT blocked_until FROM {$table_name} WHERE ip_address = %s AND is_blocked = 1 AND blocked_until > %s LIMIT 1",
         $ip, $current_time
     ));
 
@@ -1387,7 +1393,7 @@ function caldps_get_rate_limit_block_notice($ip = null) {
     }
 
     $blocked_info = $wpdb->get_row($wpdb->prepare(
-        "SELECT blocked_until FROM $table_name WHERE ip_address = %s AND is_blocked = 1",
+        "SELECT blocked_until FROM {$table_name} WHERE ip_address = %s AND is_blocked = 1",
         $ip
     ));
 
@@ -1433,7 +1439,7 @@ function caldps_rate_limit_record_failure($ip = null) {
     $block_time = get_option('caldps_rate_limit_block_time', 60); // minutes
 
     $current_time = current_time('mysql');
-    $time_threshold = date('Y-m-d H:i:s', strtotime("-{$time_window} minutes", strtotime($current_time)));
+    $time_threshold = gmdate('Y-m-d H:i:s', strtotime("-{$time_window} minutes", strtotime($current_time)));
 
     // Fetch row for IP
     $attempts = $wpdb->get_row($wpdb->prepare("SELECT * FROM $table_name WHERE ip_address = %s", $ip));
@@ -1466,7 +1472,7 @@ function caldps_rate_limit_record_failure($ip = null) {
     $new_count = $count + 1; // this failure
 
     if ($new_count > $max_attempts) {
-        $blocked_until = date('Y-m-d H:i:s', strtotime("+{$block_time} minutes", strtotime($current_time)));
+        $blocked_until = gmdate('Y-m-d H:i:s', strtotime("+{$block_time} minutes", strtotime($current_time)));
         $wpdb->update(
             $table_name,
             array(
@@ -1577,7 +1583,7 @@ add_action('login_init', function(){
             return;
         }
         if (!is_user_logged_in()) {
-            wp_redirect(home_url("/$slug/"));
+            wp_safe_redirect(home_url("/$slug/"));
             exit;
         }
     }
@@ -1598,7 +1604,7 @@ add_action('admin_init', function() {
         }
 
         if (strpos($request_uri, '/wp-admin') !== false || strpos($request_uri, '/wp-login.php') !== false) {
-            wp_redirect(home_url("/$slug/"));
+            wp_safe_redirect(home_url("/$slug/"));
             exit;
         }
     }
@@ -1608,7 +1614,7 @@ add_action('admin_init', function() {
 add_action('template_redirect', function() {
     if (intval(get_query_var('caldps_custom_login')) !== 1) return;
     if (is_user_logged_in()) {
-        wp_redirect(admin_url());
+        wp_safe_redirect(admin_url());
         exit;
     }
     $greeting = get_option('caldps_greeting', 'Chào mừng bạn quay lại!');
@@ -1828,14 +1834,14 @@ class DPS_Security_Logger {
         
         if ($event_type) {
             return $wpdb->get_results($wpdb->prepare(
-                "SELECT * FROM $table_name WHERE event_type = %s ORDER BY timestamp DESC LIMIT %d",
+                "SELECT * FROM {$table_name} WHERE event_type = %s ORDER BY timestamp DESC LIMIT %d",
                 $event_type,
                 $limit
             ));
         }
         
         return $wpdb->get_results($wpdb->prepare(
-            "SELECT * FROM $table_name ORDER BY timestamp DESC LIMIT %d",
+            "SELECT * FROM {$table_name} ORDER BY timestamp DESC LIMIT %d",
             $limit
         ));
     }
@@ -1849,7 +1855,7 @@ class DPS_Security_Logger {
         $retention_days = DPS_SECURITY_LOG_RETENTION_DAYS;
         
         $wpdb->query($wpdb->prepare(
-            "DELETE FROM $table_name WHERE timestamp < DATE_SUB(NOW(), INTERVAL %d DAY)",
+            "DELETE FROM {$table_name} WHERE timestamp < DATE_SUB(NOW(), INTERVAL %d DAY)",
             $retention_days
         ));
     }

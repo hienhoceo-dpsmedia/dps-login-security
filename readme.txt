@@ -1,9 +1,9 @@
 === DPS Login Security ===
 Contributors: dpsmedia
-Tags: login, security, admin, authentication, brute force, rate limiting, custom login
+Tags: login, security, authentication, brute force, rate limiting
 Requires at least: 5.0
-Tested up to: 6.5
-Stable tag: 6.0
+Tested up to: 6.7
+Stable tag: 7.0.2
 Requires PHP: 7.4
 License: GPL v2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
