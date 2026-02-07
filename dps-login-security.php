@@ -3,7 +3,7 @@
  * Plugin Name: DPS Login Security
  * Plugin URI: https://dps.media/
  * Description: Enhanced WordPress login security with custom login page, rate limiting, and protection against brute force attacks.
- * Version: 7.0.9
+ * Version: 7.0.10
  * Requires at least: 5.0
  * Requires PHP: 7.2
  * Author: DPS.Media
@@ -25,7 +25,7 @@ if (!defined('ABSPATH')) {
 // add_action('plugins_loaded', 'dps_login_security_load_textdomain'); // Removed as discouraged since WP 4.6
 
 if (!defined('DPS_LOGIN_SECURITY_VERSION')) {
-    define('DPS_LOGIN_SECURITY_VERSION', '7.0.9');
+    define('DPS_LOGIN_SECURITY_VERSION', '7.0.10');
 }
 
 // Security module constants
@@ -727,7 +727,7 @@ function caldps_settings_page_v55() {
     </style>
     
     <div class="wrap">
-        <h1>Cài đặt DPS Login Security v7.0.9</h1>
+        <h1>Cài đặt DPS Login Security v7.0.10</h1>
         
         <form method="post">
             <?php wp_nonce_field('caldps_save_settings'); ?>
@@ -1626,9 +1626,14 @@ add_action('setup_theme', function(){
         if (in_array($action, $allowed_actions, true)) return;
     }
     
-    // 4. Xử lý Chặn (403) hoặc Chuyển hướng (Redirect)
-    $block_standard = get_option('dps_block_standard_login', 0);
+    // 4. QUAN TRỌNG: Bỏ qua nếu đang truy cập custom login slug để tránh redirect loop
     $slug = get_option('caldps_slug', 'admindps');
+    if (strpos($uri, '/' . $slug) !== false || strpos($uri, '/' . $slug . '/') !== false) {
+        return; // Cho phép truy cập vào trang login custom
+    }
+    
+    // 5. Xử lý Chặn (403) hoặc Chuyển hướng (Redirect)
+    $block_standard = intval(get_option('dps_block_standard_login', 0));
 
     if ($block_standard) {
         DPS_Security_Logger::log('standard_login_blocked', "Blocked access attempt: " . $uri, 'high');
@@ -1650,7 +1655,7 @@ remove_action( 'template_redirect', 'wp_redirect_admin_locations', 1000 );
 // Chặn các lệnh Redirect ngầm về wp-login.php từ các plugin khác
 add_filter('wp_redirect', function($location){
     if (is_user_logged_in()) return $location;
-    if (!get_option('dps_block_standard_login', 0)) return $location;
+    if (!intval(get_option('dps_block_standard_login', 0))) return $location;
 
     if (strpos($location, 'wp-login.php') !== false || strpos($location, 'wp-admin') !== false) {
         // Nếu đang cố redirect về login chuẩn, chặn đứng trả về 403
