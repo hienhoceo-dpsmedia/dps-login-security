@@ -3,7 +3,7 @@
  * Plugin Name: DPS Login Security
  * Plugin URI: https://dps.media/
  * Description: Enhanced WordPress login security with custom login page, rate limiting, and protection against brute force attacks.
- * Version: 7.0.4
+ * Version: 7.0.5
  * Requires at least: 5.0
  * Requires PHP: 7.2
  * Author: DPS.Media
@@ -25,7 +25,7 @@ if (!defined('ABSPATH')) {
 // add_action('plugins_loaded', 'dps_login_security_load_textdomain'); // Removed as discouraged since WP 4.6
 
 if (!defined('DPS_LOGIN_SECURITY_VERSION')) {
-    define('DPS_LOGIN_SECURITY_VERSION', '7.0.4');
+    define('DPS_LOGIN_SECURITY_VERSION', '7.0.5');
 }
 
 // Security module constants
@@ -610,9 +610,9 @@ function caldps_settings_page_v55() {
         echo '<div class="updated"><p>✅ Đã lưu cài đặt bảo mật! <br><strong>URL đăng nhập mới:</strong> <a href="' . esc_url($login_url) . '">' . esc_html($login_url) . '</a></p></div>';
     }
     
-    $slug = esc_attr(get_option('caldps_slug', 'admindps'));
-    $greeting = esc_attr(get_option('caldps_greeting', 'Chào mừng admin quay lại!'));
-    $logo = esc_attr(get_option('caldps_logo', ''));
+    $slug = get_option('caldps_slug', 'admindps');
+    $greeting = get_option('caldps_greeting', 'Chào mừng admin quay lại!');
+    $logo = get_option('caldps_logo', '');
     
     // Lấy giá trị hiện tại, nếu trống thì dùng mặc định
     $left_custom_html = get_option('caldps_left_custom_html', '');
@@ -624,9 +624,11 @@ function caldps_settings_page_v55() {
         $left_custom_css = caldps_get_default_css();
     }
     
-    // Khi hiển thị lại để sửa, escape cho input fields
-    $left_custom_html = esc_textarea($left_custom_html);
-    $left_custom_css = esc_textarea($left_custom_css);
+    // Variable preparation for template. 
+    // Redundant esc_textarea() removed here to prevent double-escaping 
+    // since escaping is already applied in the HTML output below.
+    $left_custom_html = $left_custom_html;
+    $left_custom_css = $left_custom_css;
     
     // Lấy các tùy chọn bảo mật
     $disable_file_edit = get_option('caldps_disable_file_edit', 0);
@@ -723,7 +725,7 @@ function caldps_settings_page_v55() {
     </style>
     
     <div class="wrap">
-        <h1>Cài đặt DPS Login Security v7.0.4</h1>
+        <h1>Cài đặt DPS Login Security v7.0.5</h1>
         
         <form method="post">
             <?php wp_nonce_field('caldps_save_settings'); ?>
