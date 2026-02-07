@@ -3,7 +3,7 @@
  * Plugin Name: DPS Login Security
  * Plugin URI: https://dps.media/
  * Description: Enhanced WordPress login security with custom login page, rate limiting, and protection against brute force attacks.
- * Version: 7.0.5
+ * Version: 7.0.6
  * Requires at least: 5.0
  * Requires PHP: 7.2
  * Author: DPS.Media
@@ -25,7 +25,7 @@ if (!defined('ABSPATH')) {
 // add_action('plugins_loaded', 'dps_login_security_load_textdomain'); // Removed as discouraged since WP 4.6
 
 if (!defined('DPS_LOGIN_SECURITY_VERSION')) {
-    define('DPS_LOGIN_SECURITY_VERSION', '7.0.5');
+    define('DPS_LOGIN_SECURITY_VERSION', '7.0.6');
 }
 
 // Security module constants
@@ -514,6 +514,7 @@ function dps_login_security_seed_defaults() {
         'dps_block_bad_methods' => 0,
         'dps_validate_query_strings' => 0,
         'dps_block_sensitive_files' => 0,
+        'dps_block_standard_login' => 0,
     );
 
     foreach ($defaults as $option => $value) {
@@ -594,6 +595,7 @@ function caldps_settings_page_v55() {
         update_option('dps_verify_googlebot', isset($_POST['dps_verify_googlebot']) ? 1 : 0);
         update_option('dps_block_bad_methods', isset($_POST['dps_block_bad_methods']) ? 1 : 0);
         update_option('dps_validate_query_strings', isset($_POST['dps_validate_query_strings']) ? 1 : 0);
+        update_option('dps_block_standard_login', isset($_POST['dps_block_standard_login']) ? 1 : 0);
         update_option('dps_block_sensitive_files', isset($_POST['dps_block_sensitive_files']) ? 1 : 0);
         
         if ($old_slug !== $new_slug) {
@@ -725,7 +727,7 @@ function caldps_settings_page_v55() {
     </style>
     
     <div class="wrap">
-        <h1>Cài đặt DPS Login Security v7.0.5</h1>
+        <h1>Cài đặt DPS Login Security v7.0.6</h1>
         
         <form method="post">
             <?php wp_nonce_field('caldps_save_settings'); ?>
@@ -746,6 +748,10 @@ function caldps_settings_page_v55() {
                     <tr><th>CSS tự do cho bên trái</th>
                         <td><textarea name="caldps_left_custom_css" style="width:550px;height:120px;"><?php echo esc_textarea($left_custom_css); ?></textarea>
                         <br><small>Inject vào &lt;style&gt;. Để trống sẽ sử dụng CSS mặc định.</small></td></tr>
+                    <tr><th>Chặn truy cập mặc định</th>
+                        <td><label><input type="checkbox" name="dps_block_standard_login" value="1" <?php checked(get_option('dps_block_standard_login', 0), 1); ?>> 
+                        <strong>Chặn truy cập vào wp-login.php và /wp-admin</strong></label>
+                        <br><small>Nếu bật, người dùng truy cập đường dẫn mặc định sẽ bị lỗi 403 Forbidden thay vì được chuyển hướng tới trang đăng nhập mới. Giúp giấu trang đăng nhập tốt hơn.</small></td></tr>
                 </table>
             </div>
             
@@ -1599,8 +1605,13 @@ add_action('login_init', function(){
             return;
         }
         if (!is_user_logged_in()) {
-            wp_safe_redirect(home_url("/$slug/"));
-            exit;
+            if (get_option('dps_block_standard_login', 0)) {
+                DPS_Security_Logger::log('standard_login_blocked', "Blocked access to standard login URL: " . $_SERVER['REQUEST_URI'], 'medium');
+                wp_die('Access Denied. Standard login is disabled for security.', 'Forbidden', array('response' => 403));
+            } else {
+                wp_safe_redirect(home_url("/$slug/"));
+                exit;
+            }
         }
     }
 }, 1);
@@ -1620,8 +1631,13 @@ add_action('admin_init', function() {
         }
 
         if (strpos($request_uri, '/wp-admin') !== false || strpos($request_uri, '/wp-login.php') !== false) {
-            wp_safe_redirect(home_url("/$slug/"));
-            exit;
+            if (get_option('dps_block_standard_login', 0)) {
+                DPS_Security_Logger::log('standard_login_blocked', "Blocked admin access attempt: $request_uri", 'medium');
+                wp_die('Access Denied. Standard login is disabled for security.', 'Forbidden', array('response' => 403));
+            } else {
+                wp_safe_redirect(home_url("/$slug/"));
+                exit;
+            }
         }
     }
 }, 1);
