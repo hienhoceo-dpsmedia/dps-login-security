@@ -3,7 +3,7 @@
  * Plugin Name: DPS Login Security
  * Plugin URI: https://dps.media/
  * Description: Enhanced WordPress login security with custom login page, rate limiting, and protection against brute force attacks.
- * Version: 7.0.3
+ * Version: 7.0.4
  * Requires at least: 5.0
  * Requires PHP: 7.2
  * Author: DPS.Media
@@ -25,7 +25,7 @@ if (!defined('ABSPATH')) {
 // add_action('plugins_loaded', 'dps_login_security_load_textdomain'); // Removed as discouraged since WP 4.6
 
 if (!defined('DPS_LOGIN_SECURITY_VERSION')) {
-    define('DPS_LOGIN_SECURITY_VERSION', '7.0.3');
+    define('DPS_LOGIN_SECURITY_VERSION', '7.0.4');
 }
 
 // Security module constants
@@ -33,27 +33,41 @@ if (!defined('DPS_SECURITY_LOG_RETENTION_DAYS')) {
     define('DPS_SECURITY_LOG_RETENTION_DAYS', 30);
 }
 
-// Ensure defaults exist even if plugin files are overwritten without reactivation
-add_action('plugins_loaded', 'dps_login_security_bootstrap_defaults', 1);
+// Register activation and deactivation hooks
+register_activation_hook(__FILE__, 'caldps_activate_plugin');
+register_deactivation_hook(__FILE__, 'caldps_deactivate_plugin');
 
+function caldps_activate_plugin() {
+    caldps_create_rate_limit_table();
+    dps_create_security_log_table();
+    dps_login_security_seed_defaults();
+    update_option('caldps_needs_rewrite_flush', true);
+    update_option('dps_login_security_version', DPS_LOGIN_SECURITY_VERSION);
+}
+
+function caldps_deactivate_plugin() {
+    // Optionally cleanup on deactivation if the user explicitly wants to reset
+    // For now, we keep the data for safety during upgrades
+    flush_rewrite_rules();
+}
+
+/**
+ * Ensures defaults exist and triggers database updates on version mismatch.
+ */
 function dps_login_security_bootstrap_defaults() {
     static $bootstrapped = false;
-
-    if ($bootstrapped) {
-        return;
-    }
-
+    if ($bootstrapped) return;
     $bootstrapped = true;
 
-    dps_login_security_seed_defaults();
+    $installed_version = get_option('dps_login_security_version');
 
-    if (get_option('dps_login_security_version') !== DPS_LOGIN_SECURITY_VERSION) {
-        update_option('dps_login_security_version', DPS_LOGIN_SECURITY_VERSION);
+    if ($installed_version !== DPS_LOGIN_SECURITY_VERSION) {
+        caldps_activate_plugin();
     }
 }
 
-// Apply defaults immediately so protections are active without needing a manual save.
-dps_login_security_bootstrap_defaults();
+// Apply bootstrap on plugins_loaded to handle updates smoothly
+add_action('plugins_loaded', 'dps_login_security_bootstrap_defaults', 1);
 
 // Text domain is handled automatically by WordPress.org for plugins hosted there.
 
@@ -709,7 +723,7 @@ function caldps_settings_page_v55() {
     </style>
     
     <div class="wrap">
-        <h1>Cài đặt DPS Login Security v7.0.3</h1>
+        <h1>Cài đặt DPS Login Security v7.0.4</h1>
         
         <form method="post">
             <?php wp_nonce_field('caldps_save_settings'); ?>
@@ -1806,6 +1820,7 @@ document.addEventListener('DOMContentLoaded', function() {
 /**
  * Security Logger - Centralized logging for all security events
  */
+if (!class_exists('DPS_Security_Logger')) {
 class DPS_Security_Logger {
     /**
      * Log a security event
@@ -1860,6 +1875,7 @@ class DPS_Security_Logger {
         ));
     }
 }
+}
 
 // Schedule daily log cleanup
 if (!wp_next_scheduled('dps_security_log_cleanup')) {
@@ -1870,6 +1886,7 @@ add_action('dps_security_log_cleanup', array('DPS_Security_Logger', 'cleanup_old
 /**
  * XMLRPC Blocker - Complete XMLRPC blocking (HIGH PRIORITY)
  */
+if (!class_exists('DPS_XMLRPC_Blocker')) {
 class DPS_XMLRPC_Blocker {
     public static function init() {
         if (get_option('dps_block_xmlrpc', 1)) { // Enabled by default
@@ -1901,10 +1918,12 @@ class DPS_XMLRPC_Blocker {
         }
     }
 }
+}
 
 /**
  * Request Validator - Query strings, HTTP methods, sensitive files
  */
+if (!class_exists('DPS_Request_Validator')) {
 class DPS_Request_Validator {
     public static function init() {
         add_action('init', array(__CLASS__, 'validate_request'), 1);
@@ -1995,10 +2014,12 @@ class DPS_Request_Validator {
         }
     }
 }
+}
 
 /**
  * User Agent Filter - Bad bots and Googlebot verification
  */
+if (!class_exists('DPS_User_Agent_Filter')) {
 class DPS_User_Agent_Filter {
     private static $bad_agents = array(
         'sqlmap', 'nikto', 'masscan', 'nmap', 'python-urllib', 
@@ -2059,10 +2080,12 @@ class DPS_User_Agent_Filter {
         }
     }
 }
+}
 
 /**
  * Login Scanner - Detect automated login scanning patterns (HIGH PRIORITY)
  */
+if (!class_exists('DPS_Login_Scanner')) {
 class DPS_Login_Scanner {
     public static function init() {
         if (get_option('dps_detect_login_scan', 1)) { // Enabled by default
@@ -2096,6 +2119,7 @@ class DPS_Login_Scanner {
             DPS_Security_Logger::log('common_username_scan', "Scan attempt for username: $username", 'medium');
         }
     }
+}
 }
 
 // Initialize all security modules
