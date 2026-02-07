@@ -1878,18 +1878,20 @@ class DPS_XMLRPC_Blocker {
     public static function block_xmlrpc_access() {
         if (defined('XMLRPC_REQUEST') && XMLRPC_REQUEST) {
             DPS_Security_Logger::log('xmlrpc_blocked', 'XMLRPC request blocked via XMLRPC_REQUEST constant', 'high');
-            status_header(403);
+            http_response_code(403);
+            header('Content-Type: text/plain; charset=utf-8');
             nocache_headers();
-            die('XMLRPC is disabled for security reasons');
+            exit; // No message body - clean 403
         }
         
         // Block direct xmlrpc.php file access
         $request_uri = $_SERVER['REQUEST_URI'] ?? '';
         if (stripos($request_uri, 'xmlrpc.php') !== false) {
             DPS_Security_Logger::log('xmlrpc_blocked', 'Direct XMLRPC file access attempt', 'high');
-            status_header(403);
+            http_response_code(403);
+            header('Content-Type: text/plain; charset=utf-8');
             nocache_headers();
-            die('Access Denied');
+            exit; // No message body - clean 403
         }
     }
 }
