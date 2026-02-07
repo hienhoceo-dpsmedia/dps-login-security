@@ -3,7 +3,7 @@
  * Plugin Name: DPS Login Security
  * Plugin URI: https://dps.media/
  * Description: Enhanced WordPress login security with custom login page, rate limiting, and protection against brute force attacks.
- * Version: 6.1
+ * Version: 7.0
  * Requires at least: 5.0
  * Requires PHP: 7.2
  * Author: DPS.Media
@@ -25,7 +25,12 @@ if (!defined('ABSPATH')) {
 add_action('plugins_loaded', 'dps_login_security_load_textdomain');
 
 if (!defined('DPS_LOGIN_SECURITY_VERSION')) {
-    define('DPS_LOGIN_SECURITY_VERSION', '6.1');
+    define('DPS_LOGIN_SECURITY_VERSION', '7.0');
+}
+
+// Security module constants
+if (!defined('DPS_SECURITY_LOG_RETENTION_DAYS')) {
+    define('DPS_SECURITY_LOG_RETENTION_DAYS', 30);
 }
 
 // Ensure defaults exist even if plugin files are overwritten without reactivation
@@ -491,6 +496,16 @@ function dps_login_security_seed_defaults() {
         'caldps_rate_limit_attempts' => 5,
         'caldps_rate_limit_time' => 15,
         'caldps_rate_limit_block_time' => 60,
+        // v7.0 Advanced Protection (enabled by default for high priority features)
+        'dps_block_xmlrpc' => 1,
+        'dps_detect_login_scan' => 1,
+        'dps_block_user_enum' => 1,
+        // Optional features (disabled by default)
+        'dps_block_bad_agents' => 0,
+        'dps_verify_googlebot' => 0,
+        'dps_block_bad_methods' => 0,
+        'dps_validate_query_strings' => 0,
+        'dps_block_sensitive_files' => 0,
     );
 
     foreach ($defaults as $option => $value) {
@@ -563,6 +578,16 @@ function caldps_settings_page_v55() {
         update_option('caldps_rate_limit_time', absint($_POST['caldps_rate_limit_time']));
         update_option('caldps_rate_limit_block_time', absint($_POST['caldps_rate_limit_block_time']));
         
+        // Lưu cài đặt Advanced Protection (v7.0)
+        update_option('dps_block_xmlrpc', isset($_POST['dps_block_xmlrpc']) ? 1 : 0);
+        update_option('dps_detect_login_scan', isset($_POST['dps_detect_login_scan']) ? 1 : 0);
+        update_option('dps_block_user_enum', isset($_POST['dps_block_user_enum']) ? 1 : 0);
+        update_option('dps_block_bad_agents', isset($_POST['dps_block_bad_agents']) ? 1 : 0);
+        update_option('dps_verify_googlebot', isset($_POST['dps_verify_googlebot']) ? 1 : 0);
+        update_option('dps_block_bad_methods', isset($_POST['dps_block_bad_methods']) ? 1 : 0);
+        update_option('dps_validate_query_strings', isset($_POST['dps_validate_query_strings']) ? 1 : 0);
+        update_option('dps_block_sensitive_files', isset($_POST['dps_block_sensitive_files']) ? 1 : 0);
+        
         if ($old_slug !== $new_slug) {
             // Schedule rewrite rules flush for next init
             update_option('caldps_needs_rewrite_flush', true);
@@ -607,6 +632,17 @@ function caldps_settings_page_v55() {
     $rate_limit_attempts = get_option('caldps_rate_limit_attempts', 5);
     $rate_limit_time = get_option('caldps_rate_limit_time', 15);
     $rate_limit_block_time = get_option('caldps_rate_limit_block_time', 60);
+    
+    // Lấy cài đặt Advanced Protection (v7.0)
+    $block_xmlrpc = get_option('dps_block_xmlrpc', 1);
+    $detect_login_scan = get_option('dps_detect_login_scan', 1);
+    $block_user_enum = get_option('dps_block_user_enum', 1);
+    $block_bad_agents = get_option('dps_block_bad_agents', 0);
+    $verify_googlebot = get_option('dps_verify_googlebot', 0);
+    $block_bad_methods = get_option('dps_block_bad_methods', 0);
+    $validate_query_strings = get_option('dps_validate_query_strings', 0);
+    $block_sensitive_files = get_option('dps_block_sensitive_files', 0);
+    
     // Lấy danh sách IP đang bị chặn (nếu có) để hiển thị
     global $wpdb;
     $blocked_list = array();
@@ -793,6 +829,66 @@ function caldps_settings_page_v55() {
                 });
                 </script>
 
+            </div>
+            
+            <!-- Phần Advanced Protection (v7.0) -->
+            <div class="caldps-security-section">
+                <h3>🛡️ Advanced Protection (v7.0 - NEW!)</h3>
+                <div class="caldps-warning">
+                    <strong>ℹ️ Lưu ý:</strong> Các tính năng mới được thiết kế để chặn các cuộc tấn công tự động. XMLRPC và Login Scan được bật mặc định.
+                </div>
+
+                <h4>🔥 Bảo vệ ưu tiên cao (Khuyến nghị BẬT)</h4>
+                
+                <div class="caldps-checkbox-item" style="background: #fffaf0; border-left: 4px solid #ff6b6b;">
+                    <input type="checkbox" id="dps_block_xmlrpc" name="dps_block_xmlrpc" value="1" <?php checked($block_xmlrpc, 1); ?>>
+                    <label for="dps_block_xmlrpc">🚫 Chặn XMLRPC hoàn toàn</label>
+                    <span class="description">Chặn tất cả XML-RPC requests (bao gồm pingback attacks). <strong>Rất khuyến nghị!</strong></span>
+                </div>
+                
+                <div class="caldps-checkbox-item" style="background: #fffaf0; border-left: 4px solid #ff6b6b;">
+                    <input type="checkbox" id="dps_detect_login_scan" name="dps_detect_login_scan" value="1" <?php checked($detect_login_scan, 1); ?>>
+                    <label for="dps_detect_login_scan">🔍 Phát hiện Login Scan</label>
+                    <span class="description">Ghi log các lần đăng nhập thất bại với username phổ biến (admin, root, etc). <strong>Khuyến nghị!</strong></span>
+                </div>
+                
+                <div class="caldps-checkbox-item" style="background: #fffaf0; border-left: 4px solid #ff6b6b;">
+                    <input type="checkbox" id="dps_block_user_enum" name="dps_block_user_enum" value="1" <?php checked($block_user_enum, 1); ?>>
+                    <label for="dps_block_user_enum">🙈 Chặn Username Enumeration</label>
+                    <span class="description">Chặn scan username qua author pages (?author=N). <strong>Khuyến nghị!</strong></span>
+                </div>
+
+                <h4>🤖 Bảo vệ nâng cao (Tùy chọn)</h4>
+                
+                <div class="caldps-checkbox-item">
+                    <input type="checkbox" id="dps_block_bad_agents" name="dps_block_bad_agents" value="1" <?php checked($block_bad_agents, 1); ?>>
+                    <label for="dps_block_bad_agents">🤖 Chặn Bad User Agents</label>
+                    <span class="description">Chặn bots xấu (sqlmap, nikto, Bytespider, AhrefsBot, SemrushBot, etc)</span>
+                </div>
+                
+                <div class="caldps-checkbox-item">
+                    <input type="checkbox" id="dps_verify_googlebot" name="dps_verify_googlebot" value="1" <?php checked($verify_googlebot, 1); ?>>
+                    <label for="dps_verify_googlebot">🕷️ Xác thực Googlebot</label>
+                    <span class="description">Chặn fake Googlebot qua reverse DNS check</span>
+                </div>
+                
+                <div class="caldps-checkbox-item">
+                    <input type="checkbox" id="dps_block_bad_methods" name="dps_block_bad_methods" value="1" <?php checked($block_bad_methods, 1); ?>>
+                    <label for="dps_block_bad_methods">🚫 Chặn HTTP Methods nguy hiểm</label>
+                    <span class="description">Chặn TRACE, TRACK, CONNECT, DELETE, PATCH methods</span>
+                </div>
+                
+                <div class="caldps-checkbox-item">
+                    <input type="checkbox" id="dps_validate_query_strings" name="dps_validate_query_strings" value="1" <?php checked($validate_query_strings, 1); ?>>
+                    <label for="dps_validate_query_strings">🔍 Kiểm tra Query Strings</label>
+                    <span class="description">Chặn SQLi, LFI, XSS, Code Injection trong URL parameters</span>
+                </div>
+                
+                <div class="caldps-checkbox-item">
+                    <input type="checkbox" id="dps_block_sensitive_files" name="dps_block_sensitive_files" value="1" <?php checked($block_sensitive_files, 1); ?>>
+                    <label for="dps_block_sensitive_files">📁 Chặn truy cập file nhạy cảm</label>
+                    <span class="description">Chặn wp-config.php, .env, .git, .sql, .bak, readme.html, etc</span>
+                </div>
             </div>
             
             <p><button class="button-primary" name="caldps_save" value="1">💾 Lưu tất cả cài đặt</button></p>
@@ -1012,6 +1108,10 @@ function dps_login_security_activate() {
     dps_login_security_seed_defaults();
     update_option('dps_login_security_version', DPS_LOGIN_SECURITY_VERSION);
 
+    // Create both database tables
+    caldps_create_rate_limit_table();
+    dps_create_security_log_table();
+
     // Flush rewrite rules
     flush_rewrite_rules();
 }
@@ -1064,6 +1164,13 @@ add_action('init', function() {
     $existing = $wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $table_name));
     if ($existing !== $table_name) {
         caldps_create_rate_limit_table();
+    }
+    
+    // Also ensure security log table exists
+    $log_table = $wpdb->prefix . 'dps_security_log';
+    $log_exists = $wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $log_table));
+    if ($log_exists !== $log_table) {
+        dps_create_security_log_table();
     }
 }, 0);
 
@@ -1142,6 +1249,32 @@ function caldps_create_rate_limit_table() {
         PRIMARY KEY  (id),
         UNIQUE KEY ip_address (ip_address),
         KEY blocked_until (blocked_until)
+    ) $charset_collate;";
+
+    require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
+    dbDelta($sql);
+}
+
+// Create security log table for advanced protection features
+function dps_create_security_log_table() {
+    global $wpdb;
+    $table_name = $wpdb->prefix . 'dps_security_log';
+
+    $charset_collate = $wpdb->get_charset_collate();
+
+    $sql = "CREATE TABLE $table_name (
+        id bigint(20) NOT NULL AUTO_INCREMENT,
+        event_type varchar(50) NOT NULL,
+        ip_address varchar(45) NOT NULL,
+        uri varchar(255) NULL,
+        user_agent text NULL,
+        details text NULL,
+        severity varchar(20) DEFAULT 'medium',
+        timestamp datetime DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY  (id),
+        KEY event_type (event_type),
+        KEY ip_address (ip_address),
+        KEY timestamp (timestamp)
     ) $charset_collate;";
 
     require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
@@ -1659,4 +1792,309 @@ document.addEventListener('DOMContentLoaded', function() {
     <?php
     exit;
 });
+
+// ==========================================
+// === SECURITY MODULES (v7.0) ===
+// ==========================================
+
+/**
+ * Security Logger - Centralized logging for all security events
+ */
+class DPS_Security_Logger {
+    /**
+     * Log a security event
+     */
+    public static function log($event_type, $details, $severity = 'medium') {
+        global $wpdb;
+        $table_name = $wpdb->prefix . 'dps_security_log';
+        
+        $wpdb->insert($table_name, array(
+            'event_type' => sanitize_key($event_type),
+            'ip_address' => caldps_get_client_ip(),
+            'uri' => sanitize_text_field($_SERVER['REQUEST_URI'] ?? ''),
+            'user_agent' => sanitize_text_field(substr($_SERVER['HTTP_USER_AGENT'] ?? '', 0, 255)),
+            'details' => sanitize_text_field($details),
+            'severity' => sanitize_key($severity),
+            'timestamp' => current_time('mysql')
+        ));
+    }
+    
+    /**
+     * Get recent security events
+     */
+    public static function get_recent_events($limit = 100, $event_type = null) {
+        global $wpdb;
+        $table_name = $wpdb->prefix . 'dps_security_log';
+        
+        if ($event_type) {
+            return $wpdb->get_results($wpdb->prepare(
+                "SELECT * FROM $table_name WHERE event_type = %s ORDER BY timestamp DESC LIMIT %d",
+                $event_type,
+                $limit
+            ));
+        }
+        
+        return $wpdb->get_results($wpdb->prepare(
+            "SELECT * FROM $table_name ORDER BY timestamp DESC LIMIT %d",
+            $limit
+        ));
+    }
+    
+    /**
+     * Cleanup old logs (30 days)
+     */
+    public static function cleanup_old_logs() {
+        global $wpdb;
+        $table_name = $wpdb->prefix . 'dps_security_log';
+        $retention_days = DPS_SECURITY_LOG_RETENTION_DAYS;
+        
+        $wpdb->query($wpdb->prepare(
+            "DELETE FROM $table_name WHERE timestamp < DATE_SUB(NOW(), INTERVAL %d DAY)",
+            $retention_days
+        ));
+    }
+}
+
+// Schedule daily log cleanup
+if (!wp_next_scheduled('dps_security_log_cleanup')) {
+    wp_schedule_event(time(), 'daily', 'dps_security_log_cleanup');
+}
+add_action('dps_security_log_cleanup', array('DPS_Security_Logger', 'cleanup_old_logs'));
+
+/**
+ * XMLRPC Blocker - Complete XMLRPC blocking (HIGH PRIORITY)
+ */
+class DPS_XMLRPC_Blocker {
+    public static function init() {
+        if (get_option('dps_block_xmlrpc', 1)) { // Enabled by default
+            // Disable XMLRPC functionality
+            add_filter('xmlrpc_enabled', '__return_false', 9999);
+            
+            // Block direct access to xmlrpc.php
+            add_action('init', array(__CLASS__, 'block_xmlrpc_access'), 1);
+        }
+    }
+    
+    public static function block_xmlrpc_access() {
+        if (defined('XMLRPC_REQUEST') && XMLRPC_REQUEST) {
+            DPS_Security_Logger::log('xmlrpc_blocked', 'XMLRPC request blocked via XMLRPC_REQUEST constant', 'high');
+            status_header(403);
+            nocache_headers();
+            die('XMLRPC is disabled for security reasons');
+        }
+        
+        // Block direct xmlrpc.php file access
+        $request_uri = $_SERVER['REQUEST_URI'] ?? '';
+        if (stripos($request_uri, 'xmlrpc.php') !== false) {
+            DPS_Security_Logger::log('xmlrpc_blocked', 'Direct XMLRPC file access attempt', 'high');
+            status_header(403);
+            nocache_headers();
+            die('Access Denied');
+        }
+    }
+}
+
+/**
+ * Request Validator - Query strings, HTTP methods, sensitive files
+ */
+class DPS_Request_Validator {
+    public static function init() {
+        add_action('init', array(__CLASS__, 'validate_request'), 1);
+    }
+    
+    public static function validate_request() {
+        // HTTP Method validation
+        if (get_option('dps_block_bad_methods', 0)) {
+            self::validate_http_method();
+        }
+        
+        // Query string validation
+        if (get_option('dps_validate_query_strings', 0)) {
+            self::validate_query_string();
+        }
+        
+        // Sensitive file protection
+        if (get_option('dps_block_sensitive_files', 0)) {
+            self::block_sensitive_files();
+        }
+    }
+    
+    private static function validate_http_method() {
+        $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
+        $blocked_methods = array('TRACE', 'TRACK', 'CONNECT', 'MOVE', 'DEBUG', 'DELETE', 'PATCH');
+        
+        if (in_array($method, $blocked_methods)) {
+            DPS_Security_Logger::log('bad_http_method', "Method: $method", 'medium');
+            status_header(405);
+            nocache_headers();
+            die('Method Not Allowed');
+        }
+    }
+    
+    private static function validate_query_string() {
+        $query = $_SERVER['QUERY_STRING'] ?? '';
+        
+        if (empty($query)) {
+            return;
+        }
+        
+        $patterns = array(
+            '/\.\.\//i' => 'Directory Traversal',
+            '/union.*select/i' => 'SQL Injection',
+            '/etc\/passwd/i' => 'LFI Attempt',
+            '/eval\(/i' => 'Code Injection',
+            '/<script/i' => 'XSS Attempt',
+            '/base64_decode/i' => 'Obfuscation',
+            '/concat\(/i' => 'SQL Injection',
+            '/exec\(/i' => 'Command Injection',
+        );
+        
+        foreach ($patterns as $pattern => $reason) {
+            if (preg_match($pattern, $query)) {
+                DPS_Security_Logger::log('malicious_query', $reason . " - Query: " . substr($query, 0, 100), 'high');
+                status_header(403);
+                nocache_headers();
+                die('Malicious Request Detected');
+            }
+        }
+    }
+    
+    private static function block_sensitive_files() {
+        $uri = $_SERVER['REQUEST_URI'] ?? '';
+        
+        $patterns = array(
+            '/wp-config\.php/i' => 'wp-config.php',
+            '/\.env/i' => '.env file',
+            '/\.git\//i' => '.git directory',
+            '/\.sql$/i' => 'SQL file',
+            '/\.tar\.gz$/i' => 'Archive file',
+            '/\.zip$/i' => 'ZIP file',
+            '/\.bak$/i' => 'Backup file',
+            '/\.backup$/i' => 'Backup file',
+            '/readme\.html/i' => 'readme.html',
+            '/license\.txt/i' => 'license.txt',
+            '/\.htaccess/i' => '.htaccess',
+            '/\.user\.ini/i' => '.user.ini',
+        );
+        
+        foreach ($patterns as $pattern => $file_type) {
+            if (preg_match($pattern, $uri)) {
+                DPS_Security_Logger::log('sensitive_file_blocked', "File type: $file_type - URI: $uri", 'high');
+                status_header(403);
+                nocache_headers();
+                die('Access Denied');
+            }
+        }
+    }
+}
+
+/**
+ * User Agent Filter - Bad bots and Googlebot verification
+ */
+class DPS_User_Agent_Filter {
+    private static $bad_agents = array(
+        'sqlmap', 'nikto', 'masscan', 'nmap', 'python-urllib', 
+        'go-http-client', 'Bytespider', 'MJ12bot', 'AhrefsBot', 
+        'SemrushBot', 'DotBot', 'PetalBot', 'MegaIndex', 'SeznamBot',
+        'AspiegelBot', 'BLEXBot', 'Riddler', 'ZoomBot', 'linkdexbot'
+    );
+    
+    public static function init() {
+        if (get_option('dps_block_bad_agents', 0)) {
+            add_action('init', array(__CLASS__, 'check_user_agent'), 1);
+        }
+    }
+    
+    public static function check_user_agent() {
+        $user_agent = $_SERVER['HTTP_USER_AGENT'] ?? '';
+        
+        if (empty($user_agent)) {
+            // Block empty user agents
+            DPS_Security_Logger::log('empty_user_agent', 'Empty user agent blocked', 'medium');
+            status_header(403);
+            nocache_headers();
+            die('Access Denied');
+        }
+        
+        // Check against bad agent list
+        foreach (self::$bad_agents as $agent) {
+            if (stripos($user_agent, $agent) !== false) {
+                DPS_Security_Logger::log('bad_agent_blocked', "Agent: $agent - Full UA: " . substr($user_agent, 0, 100), 'medium');
+                status_header(403);
+                nocache_headers();
+                die('Access Denied');
+            }
+        }
+        
+        // Googlebot verification (optional)
+        if (get_option('dps_verify_googlebot', 0)) {
+            self::verify_googlebot($user_agent);
+        }
+    }
+    
+    private static function verify_googlebot($user_agent) {
+        // Check if claiming to be Googlebot
+        if (stripos($user_agent, 'Googlebot') !== false || 
+            stripos($user_agent, 'AdsBot-Google') !== false ||
+            stripos($user_agent, 'Mediapartners-Google') !== false) {
+            
+            $ip = caldps_get_client_ip();
+            $hostname = gethostbyaddr($ip);
+            
+            // Verify reverse DNS matches Google domains
+            if (!preg_match('/\.(googlebot|google)\.com$/i', $hostname)) {
+                DPS_Security_Logger::log('fake_googlebot', "IP: $ip - Hostname: $hostname", 'high');
+                status_header(403);
+                nocache_headers();
+                die('Fake Googlebot Detected');
+            }
+        }
+    }
+}
+
+/**
+ * Login Scanner - Detect automated login scanning patterns (HIGH PRIORITY)
+ */
+class DPS_Login_Scanner {
+    public static function init() {
+        if (get_option('dps_detect_login_scan', 1)) { // Enabled by default
+            // Block username enumeration via author pages
+            add_action('init', array(__CLASS__, 'block_user_enumeration'), 1);
+            
+            // Log failed login attempts with common usernames
+            add_action('wp_login_failed', array(__CLASS__, 'log_failed_username'));
+        }
+    }
+    
+    public static function block_user_enumeration() {
+        if (get_option('dps_block_user_enum', 1)) {
+            $request_uri = $_SERVER['REQUEST_URI'] ?? '';
+            
+            // Block author enumeration via /?author=N
+            if (preg_match('/[?&]author=(\d+)/i', $request_uri)) {
+                DPS_Security_Logger::log('user_enum_blocked', 'Author page enumeration attempt', 'medium');
+                status_header(403);
+                nocache_headers();
+                die('Forbidden');
+            }
+        }
+    }
+    
+    public static function log_failed_username($username) {
+        // Track attempts with common admin usernames
+        $common_usernames = array('admin', 'administrator', 'root', 'user', 'test', 'demo', 'guest', 'wp-admin', 'support');
+        
+        if (in_array(strtolower($username), $common_usernames)) {
+            DPS_Security_Logger::log('common_username_scan', "Scan attempt for username: $username", 'medium');
+        }
+    }
+}
+
+// Initialize all security modules
+add_action('plugins_loaded', function() {
+    DPS_XMLRPC_Blocker::init();
+    DPS_Request_Validator::init();
+    DPS_User_Agent_Filter::init();
+    DPS_Login_Scanner::init();
+}, 5);
 ?>
