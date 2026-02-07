@@ -3,7 +3,7 @@
  * Plugin Name: DPS Login Security
  * Plugin URI: https://dps.media/
  * Description: Enhanced WordPress login security with custom login page, rate limiting, and protection against brute force attacks.
- * Version: 7.0
+ * Version: 7.0.1
  * Requires at least: 5.0
  * Requires PHP: 7.2
  * Author: DPS.Media
@@ -25,7 +25,7 @@ if (!defined('ABSPATH')) {
 add_action('plugins_loaded', 'dps_login_security_load_textdomain');
 
 if (!defined('DPS_LOGIN_SECURITY_VERSION')) {
-    define('DPS_LOGIN_SECURITY_VERSION', '7.0');
+    define('DPS_LOGIN_SECURITY_VERSION', '7.0.1');
 }
 
 // Security module constants
