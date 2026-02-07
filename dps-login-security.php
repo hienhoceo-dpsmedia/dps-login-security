@@ -3,7 +3,7 @@
  * Plugin Name: DPS Login Security
  * Plugin URI: https://dps.media/
  * Description: Enhanced WordPress login security with custom login page, rate limiting, and protection against brute force attacks.
- * Version: 7.0.7
+ * Version: 7.0.8
  * Requires at least: 5.0
  * Requires PHP: 7.2
  * Author: DPS.Media
@@ -25,7 +25,7 @@ if (!defined('ABSPATH')) {
 // add_action('plugins_loaded', 'dps_login_security_load_textdomain'); // Removed as discouraged since WP 4.6
 
 if (!defined('DPS_LOGIN_SECURITY_VERSION')) {
-    define('DPS_LOGIN_SECURITY_VERSION', '7.0.7');
+    define('DPS_LOGIN_SECURITY_VERSION', '7.0.8');
 }
 
 // Security module constants
@@ -727,7 +727,7 @@ function caldps_settings_page_v55() {
     </style>
     
     <div class="wrap">
-        <h1>Cài đặt DPS Login Security v7.0.7</h1>
+        <h1>Cài đặt DPS Login Security v7.0.8</h1>
         
         <form method="post">
             <?php wp_nonce_field('caldps_save_settings'); ?>
@@ -1592,32 +1592,43 @@ add_action('init', function(){
     // 1. Bỏ qua AJAX và Cron
     if ((defined('DOING_AJAX') && DOING_AJAX) || (defined('DOING_CRON') && DOING_CRON)) return;
     
-    // 2. Nhận diện các đường dẫn mặc định
-    $is_login_page = ($pagenow === 'wp-login.php');
-    $is_admin_page = (is_admin() && !is_user_logged_in());
+    // 2. Nhận diện các đường dẫn mặc định một cách triệt để
+    $uri = isset($_SERVER['REQUEST_URI']) ? $_SERVER['REQUEST_URI'] : '';
     
-    if (!$is_login_page && !$is_admin_page) return;
+    // Cả wp-login.php và các biến thể /wp-admin
+    $is_login_page = ($pagenow === 'wp-login.php' || strpos($uri, 'wp-login.php') !== false);
+    $is_admin_request = (is_admin() || strpos($uri, '/wp-admin') !== false);
+    
+    // Bỏ qua nếu đã login
     if (is_user_logged_in()) return;
 
-    // 3. Ngoại lệ cho các hành động mặc định của WordPress
+    // Filter out AJAX và Post requests cho admin
+    if ($is_admin_request && (strpos($uri, 'admin-ajax.php') !== false || strpos($uri, 'admin-post.php') !== false)) return;
+
+    if (!$is_login_page && !$is_admin_request) return;
+
+    // 3. Ngoại lệ cho các hành động mặc định của WordPress (Mất mật khẩu, Logout)
     if ($is_login_page) {
         $action = isset($_REQUEST['action']) ? sanitize_key($_REQUEST['action']) : '';
         $allowed_actions = array('lostpassword', 'retrievepassword', 'rp', 'resetpass', 'postpass', 'logout');
         if (in_array($action, $allowed_actions, true)) return;
     }
     
-    // Cho wp-admin, cho phép admin-ajax.php và admin-post.php
-    if ($is_admin_page) {
-        $uri = $_SERVER['REQUEST_URI'];
-        if (strpos($uri, 'admin-ajax.php') !== false || strpos($uri, 'admin-post.php') !== false) return;
-    }
-
     // 4. Xử lý Chặn (403) hoặc Chuyển hướng (Redirect)
     $slug = get_option('caldps_slug', 'admindps');
-    if (get_option('dps_block_standard_login', 0)) {
-        DPS_Security_Logger::log('standard_login_blocked', "Blocked attempt to: " . $_SERVER['REQUEST_URI'], 'high');
+    $block_standard = get_option('dps_block_standard_login', 0);
+
+    if ($block_standard) {
+        DPS_Security_Logger::log('standard_login_blocked', "Blocked access attempt: " . $uri, 'high');
+        status_header(403);
+        nocache_headers();
+        header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+        header('Pragma: no-cache');
+        header('Expires: 0');
         wp_die('Access Denied. Standard login is disabled for security.', 'Forbidden', array('response' => 403));
     } else {
+        // Log redirect for debugging if needed
+        // DPS_Security_Logger::log('standard_login_redirected', "Redirected access attempt: " . $uri, 'low');
         wp_safe_redirect(home_url("/$slug/"));
         exit;
     }
